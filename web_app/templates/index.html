@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Index</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+    <script defer src="{{ url_for('static', filename='js/index.js') }}"></script>
+</head>
+
+<body>
+
+    <div class="sidebar">
+        <div class="profile">
+            <img src="{{ url_for('static', filename='images/profile_pic.png') }}" alt="Profile Image">
+        </div>
+        <ul class="nav-links">
+            <li><a href="#" class="nav-tab active" data-tab="home">Home</a></li>
+            <li><a href="#" class="nav-tab" data-tab="project1">Project 1</a></li>
+            <li><a href="#" class="nav-tab" data-tab="project2">Project 2</a></li>
+            <li><a href="#" class="nav-tab" data-tab="project3">Project 3</a></li>
+            <li><a href="#" class="nav-tab" data-tab="project4">Project 4</a></li>
+            <li><a href="#" class="nav-tab" data-tab="project5">Project 5</a></li>
+        </ul>
+    </div>
+
+    <div class="content">
+        <div id="home" class="tab-content active-content">
+            <h1>Welcome to the Home Page</h1>
+            <p>This is the home page content.</p>
+        </div>
+        <div id="project1" class="tab-content">
+            <h1>Project 1</h1>
+            <p>Details about Project 1...</p>
+        </div>
+        <div id="project2" class="tab-content">
+            <h1>Project 2</h1>
+            <p>Details about Project 2...</p>
+        </div>
+        <div id="project3" class="tab-content">
+            <h1>Project 3</h1>
+            <p>Details about Project 3...</p>
+        </div>
+        <div id="project4" class="tab-content">
+            <h1>Project 4</h1>
+            <p>Details about Project 4...</p>
+        </div>
+        <div id="project5" class="tab-content">
+            <h1>Project 5</h1>
+            <p>Details about Project 5...</p>
+        </div>
+    </div>
+
+
+
+
+    <div class="chatbot-container">
+        <div class="chatbot-header">
+            Chat With Knowledgeable A.I.
+            <span class="chatbot-toggle">−</span>
+        </div>
+        <div class="chatbot-messages"></div>
+        <div class="chatbot-input-container">
+            <input type="text" id="chatbot-input" placeholder="Type a message...">
+            <button id="chatbot-send">Send</button>
+        </div>
+    </div>
+
+
+
+</body>
+
+</html>
+
+
+
+
