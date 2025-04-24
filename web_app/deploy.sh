@@ -1,8 +1,8 @@
 #!/bin/bash
 
-SERVICE_NAME="YOUR-APP-NAME" # Define your service name here. Example "test-portal"
-PROJECT_NAME="YOUR-GCLOUD-PROJECT" # Reference to an existing Google Cloud Console Project
-REGION="us-central1" # Should match the region you want to host your app from
+SERVICE_NAME="robot-sim" # Define your service name here. Example "test-portal"
+PROJECT_NAME="YOUR_PROJECT" # Reference to an existing Google Cloud Console Project
+REGION="us-east1" # Should match the region you want to host your app from
 
 # Step 1: Build and push the container image
 gcloud builds submit --tag gcr.io/${PROJECT_NAME}/${SERVICE_NAME} .
