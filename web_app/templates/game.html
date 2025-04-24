@@ -78,8 +78,8 @@
     const ROBOT_RADIUS = 2;
     const ROBOT_HEIGHT = 7;
     const ROBOT_MASS = 1;
-    const ROBOT_IMPULSE_STRENGTH = 0.9;
-    const ROBOT_IMPULSE_CLIMB_STRENGTH = 0.5;
+    const ROBOT_IMPULSE_STRENGTH = 0.8;
+    const ROBOT_IMPULSE_CLIMB_STRENGTH = 0.1;
     const ROBOT_ROTATION_SPEED = 0.05;
     const ROBOT_BASE_FRICTION = 6.0;
     const ROBOT_LATERAL_FRICTION = 1000.0;
@@ -121,10 +121,6 @@
     let deltaTime;
     let now;
 
-    let event1Timer = 0;
-    let event1 = false;
-
-
 
 
 
@@ -161,20 +157,6 @@
 
 
       function start() {
-        settings.showDebugArrows = false;
-
-        // Force update the arrow visibility manually
-        for (const obj of gameObjects) {
-          if (obj.arrows) {
-            obj.arrows.x.visible = settings.showDebugArrows;
-            obj.arrows.y.visible = settings.showDebugArrows;
-            obj.arrows.z.visible = settings.showDebugArrows;
-          }
-        }
-
-        if (showDebugArrowsController) {
-            showDebugArrowsController.updateDisplay();
-          }
 
         // YOUR CODE HERE
 
@@ -206,7 +188,28 @@
 
     function update() {
       coreGame();
+
       // YOUR CODE HERE
+
+      cameraAutoFollowEnabled = true;
+
+      if(distanceSensor(0) < 30) // obstacle detected directly ahead within 30 steps
+      {
+        turnRobotRight();
+        moveRobotBackward();
+      }
+      else if (distanceSensor(Math.PI/6) < 25) // obstacle detected on left at 30 degrees within 25 steps
+      {
+        turnRobotRight();
+      }
+      else if (distanceSensor(-Math.PI/6) < 25) // obstacle detected on right at 30 degrees within 25 steps
+      {
+        turnRobotLeft();
+      }
+      else
+      {
+        moveRobotForward();
+      }
 
     }
 
@@ -358,6 +361,55 @@
         },
         "robot_buddy"
       );
+
+
+
+
+
+
+      // create rocks around edge of plate to make boundary
+      let rockCounter = 1;
+      const rockSpacing = 50;
+      const rockRadius = 30;
+      const rockHeight = 60;
+      const rockY = -30;
+
+      const rockOptions = {
+        objPath: '/static/models/rock/tinker.obj',
+        mtlPath: '/static/models/rock/obj.mtl',
+        scale: new THREE.Vector3(0.9, 0.9, 0.9),
+        rotation: new THREE.Euler(0, Math.PI / 2, Math.PI / 2),
+        offset: new THREE.Vector3(-30, 28, -4)
+      };
+
+      // Top edge (z = PLANE_SIZE/2)
+      for (let x = -PLANE_SIZE/2; x <= PLANE_SIZE/2; x += rockSpacing) {
+        createCapsuleObstacle(new THREE.Vector3(x, rockY, PLANE_SIZE/2), rockRadius, rockHeight, 0, rockOptions, `rock${rockCounter++}`);
+      }
+
+      // Bottom edge (z = -PLANE_SIZE/2)
+      for (let x = -PLANE_SIZE/2; x <= PLANE_SIZE/2; x += rockSpacing) {
+        createCapsuleObstacle(new THREE.Vector3(x, rockY, -PLANE_SIZE/2), rockRadius, rockHeight, 0, rockOptions, `rock${rockCounter++}`);
+      }
+
+      // Right edge (x = PLANE_SIZE/2)
+      for (let z = -PLANE_SIZE/2 + rockSpacing; z < PLANE_SIZE/2; z += rockSpacing) {
+        createCapsuleObstacle(new THREE.Vector3(PLANE_SIZE/2, rockY, z), rockRadius, rockHeight, 0, rockOptions, `rock${rockCounter++}`);
+      }
+
+      // Left edge (x = -PLANE_SIZE/2)
+      for (let z = -PLANE_SIZE/2 + rockSpacing; z < PLANE_SIZE/2; z += rockSpacing) {
+        createCapsuleObstacle(new THREE.Vector3(-PLANE_SIZE/2, rockY, z), rockRadius, rockHeight, 0, rockOptions, `rock${rockCounter++}`);
+      }
+
+
+
+
+
+
+
+
+
     }
 
 
@@ -1386,7 +1438,8 @@
     }
 
 
-    function senseRobotDistance(maxDistance = 500) {
+
+    function senseRobotDistance(yRotation = 0, maxDistance = 500) {
       if (!robot) return null;
 
       const rayFrom = new Ammo.btVector3();
@@ -1397,9 +1450,13 @@
 
       const origin = transform.getOrigin();
       const rotation = transform.getRotation();
-      const quat = new THREE.Quaternion(rotation.x(), rotation.y(), rotation.z(), rotation.w());
+      const baseQuat = new THREE.Quaternion(rotation.x(), rotation.y(), rotation.z(), rotation.w());
 
-      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(quat).normalize();
+      // Apply additional y-axis rotation
+      const yRotQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yRotation);
+      const adjustedQuat = baseQuat.clone().multiply(yRotQuat);
+
+      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(adjustedQuat).normalize();
 
       // Offset the ray origin forward and slightly above the robot
       const forwardOffset = 3;
@@ -1419,8 +1476,6 @@
 
       if (rayCallback.hasHit()) {
         const hitBody = Ammo.castObject(rayCallback.get_m_collisionObject(), Ammo.btRigidBody);
-
-        // Filter out self and arm
         if (hitBody === robot || hitBody === robotArmBody) return null;
 
         const hitPoint = rayCallback.get_m_hitPointWorld();
@@ -1433,6 +1488,7 @@
 
       return null; // No hit
     }
+
 
 
     function senseRobotHitName(maxDistance = 500, rayStartOffset = 3) {
@@ -1482,9 +1538,9 @@
       return null; // No hit
     }
 
-    function distanceSensor()
+    function distanceSensor(yRotation = 0, maxDistance = 500)
     {
-      const robotDistance = senseRobotDistance();
+      const robotDistance = senseRobotDistance(yRotation, maxDistance);
       if (robotDistance !== null) {
         return robotDistance.toFixed(2);
       }
@@ -1727,6 +1783,21 @@
 
       if(framesSinceStart === 1){
         freezeArm();
+        settings.showDebugArrows = false;
+
+        // Force update the arrow visibility manually
+        for (const obj of gameObjects) {
+          if (obj.arrows) {
+            obj.arrows.x.visible = settings.showDebugArrows;
+            obj.arrows.y.visible = settings.showDebugArrows;
+            obj.arrows.z.visible = settings.showDebugArrows;
+          }
+        }
+
+        if (showDebugArrowsController) {
+            showDebugArrowsController.updateDisplay();
+          }
+
         start();
       }
 
