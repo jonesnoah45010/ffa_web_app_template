@@ -1,0 +1,2658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D Model with Capsule Physics and Rotation Offset</title>
+  <link rel="icon" href="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=">
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
+    .dg.ac {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 10;
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/dat.gui@0.7.9/build/dat.gui.min.js"></script>
+
+</head>
+<body>
+
+  <script src="/static/js/ammo/ammo.wasm.js"></script>
+
+  <script type="module">
+    import * as THREE from '/static/js/three/three.module.js';
+    import { OrbitControls } from '/static/js/three/OrbitControls.js';
+    import { MTLLoader } from '/static/js/three/MTLLoader.js';
+    import { OBJLoader } from '/static/js/three/OBJLoader.js';
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // VARIABLE HERE
+
+    const settings = {
+      showDebugArrows: true,
+      showColliderMeshes: false,
+    };
+
+    let showDebugArrowsController;
+
+    const sensorDisplay = {
+      distance: '...',
+      object: '...'
+    };
+
+    let instructionsBox;
+    let instructionsBoxContent;
+    let instructionsBoxButton;
+
+    const GRAVITY = -9.81;
+
+    let scene, camera, renderer, controls;
+    let physicsWorld, tmpTransform;
+    let robot = null;
+    let robotVisual = null;
+    const rigidBodies = [];
+    const gameObjects = [];
+    const keys = {};
+    const clock = new THREE.Clock();
+
+    const PLANE_SIZE = 500;
+
+    const textureLoader = new THREE.TextureLoader();
+
+    const sharedMtlLoader = new MTLLoader();
+    const sharedObjLoader = new OBJLoader();
+
+    const ROBOT_START_POSITION = new THREE.Vector3(0, 0, 50);
+    const ROBOT_MODEL_SCALE = new THREE.Vector3(0.05, 0.05, 0.07);
+    const ROBOT_MODEL_OFFSET = new THREE.Vector3(0.3, -3.5, 0);
+    const ROBOT_MODEL_ROTATION = new THREE.Euler(-Math.PI/2, 0, 0);
+    const ROBOT_RADIUS = 2;
+    const ROBOT_HEIGHT = 7;
+    const ROBOT_MASS = 1;
+    const BASE_ROBOT_IMPULSE_STRENGTH = 50;
+    let ROBOT_IMPULSE_STRENGTH = 50;
+    const ROBOT_IMPULSE_CLIMB_STRENGTH = 4;
+    let ROBOT_ROTATION_SPEED = 3;
+    const ROBOT_BASE_FRICTION = 6.0;
+    const ROBOT_LATERAL_FRICTION = 1000.0;
+    const ROBOT_USE_ANISOTROPIC_FRICTION = true;
+    let ROBOT_GRABBING = false;
+    const JUMP_STRENGTH = 20;
+    const GROUND_THRESHOLD = 0.1;
+
+
+    const CAMERA_MIN_DISTANCE = 30;
+    const CAMERA_MAX_DISTANCE = 60;
+    const CAMERA_ADJUST_SPEED = 0.05;
+    const CAMERA_VERTICAL_OFFSET = 20;  // how high above the robot we want to stay
+    const CAMERA_VERTICAL_ADJUST_SPEED = 0.05; // how fast it moves toward that height
+    let cameraAutoFollowEnabled = true;
+
+    let framesSinceStart = 0;
+
+    const multi_frame_events = {};
+
+    let timelineRobot = []; // stores the action schedule
+    let timelineActiveRobot = true;
+    let timelineClockRobot = 0; // tracks how much time has passed since start()
+
+    let timelineEvent = []; // stores the action schedule
+    let timelineActiveEvent = true;
+    let timelineClockEvent = 0; // tracks how much time has passed since start()
+
+    let distanceController;
+    let objectController;
+
+    let armBody;
+    let armHinge;
+
+    let handMesh = null;
+    let handBody = null;
+    let handPosition = new THREE.Vector3(); // updated each frame
+
+    let armTargetAngle = null;
+    let armMotorSpeed = 0.5;
+
+
+    let currentlyHolding = null; // name of what is currently being held by the robot arm, null if nothing is being held
+
+    let globalTimer = 0;
+    let globalTimerRunning = true; // whether or not the timer at the top is still running
+
+    let repairs = [
+      { building: "base1", repairTime: 5.0, timeUntilCatastrophic: 100.0 },
+      { building: "lander", repairTime: 4.0, timeUntilCatastrophic: 180.0 },
+      { building: "base2", repairTime: 5.0, timeUntilCatastrophic: 260.0 },
+      { building: "tower", repairTime: 4.0, timeUntilCatastrophic: 160.0 },
+      { building: "comsArray", repairTime: 6.0, timeUntilCatastrophic: 240.0 },
+    ]; // list of dictionaries representing the repais that need to occur.
+
+    const repairDistance = 15.0; // Distance within which the robot can start repairing
+
+    let repairsUIBox;
+    let repairsListElement;
+    let globalTimerElement;
+
+    let research = 0;
+    let researchSpeed = 1;
+    let researchDistance = 30; // how close you need to place gold minerals to lander for research to start
+
+    let researchUIBox;
+    let researchBarElement;
+    let researchTextOverlay;
+
+    let deltaTime; // elapsed time since the last frame
+    let now;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+
+
+
+
+    function start() {
+      // YOUR CODE HERE
+
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+    function update() {
+      coreGame();
+
+      if(globalTimerRunning)
+      {
+        cameraAutoFollowEnabled = true;
+        // YOUR CODE HERE
+        brain()
+
+      }
+
+    }
+
+
+
+
+    function brain(){
+      let repair = getMostUrgentRepair()
+      if (repair != null){
+        navTo(repair)
+      }
+      else if(findClosestNotResearchedMineral() === null)
+      {
+        doNothing();
+      }
+      else{
+        setRobotSpeed(90);
+        let target_mineral = findClosestNotResearchedMineral();
+        if (currentlyHolding === null){
+          navTo(target_mineral);
+          if (reached(target_mineral, 1))
+          {
+            armGrab();
+            setArmUp();
+          }
+        }
+        else{
+          navTo("lander");
+          if (reached("lander",40) && currentlyHolding != null)
+          {
+            setArmMiddle();
+            setRobotSpeed(90);
+          }
+          if (reached("lander",20) && currentlyHolding != null)
+          {
+            armDrop();
+            setRobotSpeed(85);
+          }
+          if(getDistance("robot","lander") < 30)
+          {
+            armDrop();
+            setArmMiddle();
+          }
+        }
+      }
+    }
+
+    function findClosestNotResearchedMineral()
+    {
+      let minerals = closestObjectsByDistance("mineral")
+      for (const mineral of minerals) {
+        if(!isResearched(mineral)){
+          return mineral
+        }
+      }
+      return null;
+    }
+
+    function isResearched(name){
+      return getDistance(name,"lander") <= researchDistance
+    }
+
+
+    function reached(name, dist=1){
+      return distanceSensor() <= dist && detectObject() === name;
+     }
+
+    function getMostUrgentRepair() {
+      if (repairs.length === 0) {
+        return null;
+      }
+      let mostUrgent = repairs[0];
+      for (let i = 1; i < repairs.length; i++) {
+        if (repairs[i].timeUntilCatastrophic < mostUrgent.timeUntilCatastrophic) {
+          mostUrgent = repairs[i];
+        }
+      }
+      return mostUrgent.building;
+    }
+
+    function navTo(name) {
+      // used to navigate to a target without running into obstacles
+      let sense = 20;
+      if(distanceSensor(0) <= (sense*1.5) && detectObject() === name || getDistance("robot", name) < (sense*0.5)) { // if close to target b-line towards it
+        turnRobotTowards(name);
+        moveRobotForward();
+        setRobotSpeed(95);
+      }
+      else{
+          if (distanceSensor(0) < sense && distanceSensor(Math.PI/6) < sense && distanceSensor(-Math.PI/6) < sense) { // obstacle blocking in front on left and on right
+            moveRobotBackward()
+            turnRobotRight();
+          } else if(distanceSensor(0) < (sense*1.2)) { // obstacle detected directly ahead
+            turnRobotRight();
+            moveRobotForward();
+            setRobotSpeed(90);
+          } else if (distanceSensor(Math.PI/6) < sense || distanceSensor(Math.PI/4) < sense || distanceSensor(Math.PI/2.1) < (sense*0.33)) { // obstacle detected on left at at 30, 45 or 85 degrees
+            turnRobotRight();
+            moveRobotForward();
+          } else if (distanceSensor(-Math.PI/6) < sense || distanceSensor(-Math.PI/4) < sense || distanceSensor(-Math.PI/2.1) < (sense*0.33)) { // obstacle detected on right at 30, 45 or 85 degrees
+            turnRobotLeft();
+            moveRobotForward();
+          } else { // otherwise b-line towards target
+            turnRobotTowards(name);
+            moveRobotForward();
+            setRobotSpeed(100);
+          }
+      }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    function spawnGameObjects(){
+
+      createCapsuleRobot(ROBOT_RADIUS, ROBOT_HEIGHT, ROBOT_MASS, ROBOT_START_POSITION, "robot");
+
+      createStaticGroundCollider();
+
+      armBody = createRobotArm();
+      armHinge = attachArmToRobot(armBody);
+
+
+      createBoxDynamic(
+        new THREE.Vector3(-90, 0, 25),
+        new THREE.Vector3(5, 6, 5),
+        0.001,
+        {
+          objPath: '/static/models/gold/tinker.obj',
+          mtlPath: '/static/models/gold/obj.mtl',
+          scale: new THREE.Vector3(0.12, 0.12, 0.22),
+          rotation: new THREE.Euler(-Math.PI/2, 0, 0),
+          offset: new THREE.Vector3(0, -3, 0.5)
+        },
+        "mineral1"
+      );
+
+
+      createBoxDynamic(
+        new THREE.Vector3(90, 0, 25),
+        new THREE.Vector3(5, 6, 5),
+        0.001,
+        {
+          objPath: '/static/models/gold/tinker.obj',
+          mtlPath: '/static/models/gold/obj.mtl',
+          scale: new THREE.Vector3(0.12, 0.12, 0.22),
+          rotation: new THREE.Euler(-Math.PI/2, 0, 0),
+          offset: new THREE.Vector3(0, -3, 0.5)
+        },
+        "mineral2"
+      );
+
+
+      createBoxDynamic(
+        new THREE.Vector3(90, 0, 150),
+        new THREE.Vector3(5, 6, 5),
+        0.001,
+        {
+          objPath: '/static/models/gold/tinker.obj',
+          mtlPath: '/static/models/gold/obj.mtl',
+          scale: new THREE.Vector3(0.12, 0.12, 0.22),
+          rotation: new THREE.Euler(-Math.PI/2, 0, 0),
+          offset: new THREE.Vector3(0, -3, 0.5)
+        },
+        "mineral3"
+      );
+
+
+      createBoxObstacle(
+        new THREE.Vector3(0, 0, 30),
+        new THREE.Vector3(15, 17, 15),
+        0,
+        {
+          objPath: '/static/models/lander/tinker.obj',
+          mtlPath: '/static/models/lander/obj.mtl',
+          scale: new THREE.Vector3(0.6, 0.6, 0.6),
+          rotation: new THREE.Euler(Math.PI / 2, Math.PI, Math.PI),
+          offset: new THREE.Vector3(0, 0, 5)
+        },
+        "lander"
+      );
+
+      createBoxObstacle(
+        new THREE.Vector3(100, 0, -150),
+        new THREE.Vector3(45, 33, 45),
+        0,
+        {
+          objPath: '/static/models/comsArray/tinker.obj',
+          mtlPath: '/static/models/comsArray/obj.mtl',
+          scale: new THREE.Vector3(0.3, 0.3, 0.3),
+          rotation: new THREE.Euler(Math.PI / 2, Math.PI, Math.PI),
+          offset: new THREE.Vector3(0, 0, 5)
+        },
+        "comsArray"
+      );
+
+
+      createCapsuleObstacle(
+        new THREE.Vector3(-120, -10, -150),
+        20,
+        65,
+        0,
+        {
+          objPath: '/static/models/tower/tinker.obj',
+          mtlPath: '/static/models/tower/obj.mtl',
+          scale: new THREE.Vector3(0.6, 0.6, 0.6),
+          rotation: new THREE.Euler(Math.PI / 2, Math.PI, Math.PI),
+          offset: new THREE.Vector3(-3, 0, -5)
+        },
+        "tower"
+      );
+
+
+      createBoxObstacle(
+        new THREE.Vector3(150, 0, 150),
+        new THREE.Vector3(70, 20, 70),
+        0,
+        {
+          objPath: '/static/models/base/tinker.obj',
+          mtlPath: '/static/models/base/obj.mtl',
+          scale: new THREE.Vector3(0.35, 0.35, 0.35),
+          rotation: new THREE.Euler(Math.PI / 2, Math.PI, Math.PI),
+          offset: new THREE.Vector3(1.5, 0, 0)
+        },
+        "base1"
+      );
+
+      createBoxObstacle(
+        new THREE.Vector3(-150, 0, 150),
+        new THREE.Vector3(70, 20, 70),
+        0,
+        {
+          objPath: '/static/models/base/tinker.obj',
+          mtlPath: '/static/models/base/obj.mtl',
+          scale: new THREE.Vector3(0.35, 0.35, 0.35),
+          rotation: new THREE.Euler(Math.PI / 2, Math.PI, Math.PI),
+          offset: new THREE.Vector3(1.5, 0, 0)
+        },
+        "base2"
+      );
+
+
+
+      createCapsuleObstacle(
+        new THREE.Vector3(0, -30, 150),
+        30,
+        60,
+        0,
+        {
+          objPath: '/static/models/rock/tinker.obj',
+          mtlPath: '/static/models/rock/obj.mtl',
+          scale: new THREE.Vector3(0.9, 0.9, 0.9),
+          rotation: new THREE.Euler(0, Math.PI / 2, Math.PI / 2),
+          offset: new THREE.Vector3(-30, 28, -4)
+        },
+        "rock1"
+      );
+
+      createCapsuleObstacle(
+        new THREE.Vector3(75, -30, 75),
+        30,
+        60,
+        0,
+        {
+          objPath: '/static/models/rock/tinker.obj',
+          mtlPath: '/static/models/rock/obj.mtl',
+          scale: new THREE.Vector3(0.9, 0.9, 0.9),
+          rotation: new THREE.Euler(0, Math.PI / 2, Math.PI / 2),
+          offset: new THREE.Vector3(-30, 28, -4)
+        },
+        "rock1.5"
+      );
+
+      createCapsuleObstacle(
+        new THREE.Vector3(0, -30, -150),
+        30,
+        60,
+        0,
+        {
+          objPath: '/static/models/rock/tinker.obj',
+          mtlPath: '/static/models/rock/obj.mtl',
+          scale: new THREE.Vector3(0.9, 0.9, 0.9),
+          rotation: new THREE.Euler(0, Math.PI / 2, Math.PI / 2),
+          offset: new THREE.Vector3(-30, 28, -4)
+        },
+        "rock2"
+      );
+
+      createCapsuleObstacle(
+        new THREE.Vector3(75, -30, -75),
+        30,
+        60,
+        0,
+        {
+          objPath: '/static/models/rock/tinker.obj',
+          mtlPath: '/static/models/rock/obj.mtl',
+          scale: new THREE.Vector3(0.9, 0.9, 0.9),
+          rotation: new THREE.Euler(0, Math.PI / 2, Math.PI / 2),
+          offset: new THREE.Vector3(-30, 28, -4)
+        },
+        "rock2.5"
+      );
+
+      createCapsuleObstacle(
+        new THREE.Vector3(150, -30, 0),
+        30,
+        60,
+        0,
+        {
+          objPath: '/static/models/rock/tinker.obj',
+          mtlPath: '/static/models/rock/obj.mtl',
+          scale: new THREE.Vector3(0.9, 0.9, 0.9),
+          rotation: new THREE.Euler(0, Math.PI / 2, Math.PI / 2),
+          offset: new THREE.Vector3(-30, 28, -4)
+        },
+        "rock3"
+      );
+
+      createCapsuleObstacle(
+        new THREE.Vector3(-75, -30, 75),
+        30,
+        60,
+        0,
+        {
+          objPath: '/static/models/rock/tinker.obj',
+          mtlPath: '/static/models/rock/obj.mtl',
+          scale: new THREE.Vector3(0.9, 0.9, 0.9),
+          rotation: new THREE.Euler(0, Math.PI / 2, Math.PI / 2),
+          offset: new THREE.Vector3(-30, 28, -4)
+        },
+        "rock3.5"
+      );
+
+
+
+      createCapsuleObstacle(
+        new THREE.Vector3(-150, -30, 0),
+        30,
+        60,
+        0,
+        {
+          objPath: '/static/models/rock/tinker.obj',
+          mtlPath: '/static/models/rock/obj.mtl',
+          scale: new THREE.Vector3(0.9, 0.9, 0.9),
+          rotation: new THREE.Euler(0, Math.PI / 2, Math.PI / 2),
+          offset: new THREE.Vector3(-30, 28, -4)
+        },
+        "rock4"
+      );
+
+      createCapsuleObstacle(
+        new THREE.Vector3(-75, -30, -75),
+        30,
+        60,
+        0,
+        {
+          objPath: '/static/models/rock/tinker.obj',
+          mtlPath: '/static/models/rock/obj.mtl',
+          scale: new THREE.Vector3(0.9, 0.9, 0.9),
+          rotation: new THREE.Euler(0, Math.PI / 2, Math.PI / 2),
+          offset: new THREE.Vector3(-30, 28, -4)
+        },
+        "rock4.5"
+      );
+
+
+
+
+
+
+      // create rocks around edge of plate to make boundary
+      let rockCounter = 1;
+      const rockSpacing = 50;
+      const rockRadius = 30;
+      const rockHeight = 60;
+      const rockY = -30;
+
+      const rockOptions = {
+        objPath: '/static/models/rock/tinker.obj',
+        mtlPath: '/static/models/rock/obj.mtl',
+        scale: new THREE.Vector3(0.9, 0.9, 0.9),
+        rotation: new THREE.Euler(0, Math.PI / 2, Math.PI / 2),
+        offset: new THREE.Vector3(-30, 28, -4)
+      };
+
+      // Top edge (z = PLANE_SIZE/2)
+      for (let x = -PLANE_SIZE/2; x <= PLANE_SIZE/2; x += rockSpacing) {
+        createCapsuleObstacle(new THREE.Vector3(x, rockY, PLANE_SIZE/2), rockRadius, rockHeight, 0, rockOptions, `rock${rockCounter++}`);
+      }
+
+      // Bottom edge (z = -PLANE_SIZE/2)
+      for (let x = -PLANE_SIZE/2; x <= PLANE_SIZE/2; x += rockSpacing) {
+        createCapsuleObstacle(new THREE.Vector3(x, rockY, -PLANE_SIZE/2), rockRadius, rockHeight, 0, rockOptions, `rock${rockCounter++}`);
+      }
+
+      // Right edge (x = PLANE_SIZE/2)
+      for (let z = -PLANE_SIZE/2 + rockSpacing; z < PLANE_SIZE/2; z += rockSpacing) {
+        createCapsuleObstacle(new THREE.Vector3(PLANE_SIZE/2, rockY, z), rockRadius, rockHeight, 0, rockOptions, `rock${rockCounter++}`);
+      }
+
+      // Left edge (x = -PLANE_SIZE/2)
+      for (let z = -PLANE_SIZE/2 + rockSpacing; z < PLANE_SIZE/2; z += rockSpacing) {
+        createCapsuleObstacle(new THREE.Vector3(-PLANE_SIZE/2, rockY, z), rockRadius, rockHeight, 0, rockOptions, `rock${rockCounter++}`);
+      }
+
+
+
+
+
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    function keyBoardListener(){
+
+      window.addEventListener('keydown', (e) => {
+        keys[e.key] = true;
+
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+          cameraAutoFollowEnabled = true;
+        }
+      });
+      window.addEventListener('keyup', (e) => keys[e.key] = false);
+      window.addEventListener('resize', onWindowResize);
+
+
+      window.addEventListener('keydown', (e) => {
+        keys[e.key] = true;
+
+        if (e.key === 's') {
+          raiseArm(1.5);
+          unfreezeArm()
+        }
+        if (e.key === 'w') {
+          lowerArm(1.5);
+          unfreezeArm()
+        }
+        if(e.key === 'e'){
+          ROBOT_GRABBING = true;
+        }
+        if(e.key === 'r'){
+          ROBOT_GRABBING = false;
+        }
+        if (e.key === ' ' && isGrounded()) {
+          robotJump()
+        }
+      });
+
+      window.addEventListener('keyup', (e) => {
+        keys[e.key] = false;
+
+        if (e.key === 'w' || e.key === 's') {
+          stopArm(); // stop arm when raise/lower keys are released
+          freezeArm()
+        }
+      });
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    async function init() {
+      await Ammo();
+      tmpTransform = new Ammo.btTransform();
+
+      const gui = new dat.GUI();
+      gui.close();
+
+      gui.domElement.addEventListener('keydown', (e) => e.stopPropagation());
+
+      showDebugArrowsController = gui.add(settings, 'showDebugArrows').name('Show Direction Arrows').onChange(() => {
+        for (const obj of gameObjects) {
+          if (obj.arrows) {
+            obj.arrows.x.visible = settings.showDebugArrows;
+            obj.arrows.y.visible = settings.showDebugArrows;
+            obj.arrows.z.visible = settings.showDebugArrows;
+          }
+        }
+      });
+
+
+      gui.add(settings, 'showColliderMeshes').name('Show Collider Meshes').onChange(() => {
+        for (const obj of gameObjects) {
+          if (obj.mesh && obj.name !== "robot_arm") {
+            obj.mesh.visible = settings.showColliderMeshes;
+          }
+        }
+      });
+
+      const sensorFolder = gui.addFolder('Robot Sensors');
+      distanceController = sensorFolder.add(sensorDisplay, 'distance').name('Distance');
+      objectController = sensorFolder.add(sensorDisplay, 'object').name('Object Detected');
+
+      initThree();
+      initPhysics();
+      createPlane();
+      createLighting();
+      createInstructionsBox();
+      createRepairsUI();
+      createResearchUI();
+
+
+      spawnGameObjects();
+
+      keyBoardListener();
+
+      update();
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  function setRobotSpeed(percent){
+    if (percent >= 0 && percent <= 100){
+      let p = percent/100
+      ROBOT_IMPULSE_STRENGTH = BASE_ROBOT_IMPULSE_STRENGTH*p
+    }
+  }
+
+
+
+
+
+  function moveArmToAngle(targetAngle, speed = 1.0) {
+    if (!armHinge) return;
+    
+    armTargetAngle = targetAngle;
+    armMotorSpeed = speed;
+
+    armHinge.setLimit(-Math.PI / 2, Math.PI / 2, 0.9, 0.3, 1.0); // Allow full range
+    const currentAngle = armHinge.getHingeAngle();
+    const direction = Math.sign(targetAngle - currentAngle);
+    armHinge.enableAngularMotor(true, direction * Math.abs(speed), 10);
+  }
+
+
+
+
+
+
+
+
+  function closestObject(substring = null) {
+    const robotName = "robot";
+    let closest = null;
+    let closestDist = Infinity;
+
+    for (const obj of gameObjects) {
+      if (!obj.body || obj.name === robotName) continue;
+
+      // If substring is provided, skip names that don't match
+      if (substring !== null && !obj.name.includes(substring)) continue;
+
+      const dist = getDistance(robotName, obj.name);
+      if (dist !== null && dist < closestDist) {
+        closestDist = dist;
+        closest = obj;
+      }
+    }
+
+    return closest ? closest.name : null;
+  }
+
+
+  function closestObjectsByDistance(substring = null) {
+    const robotName = "robot";
+    const robotObj = getGameObjectByName(robotName);
+    if (!robotObj || !robotObj.body) return [];
+
+    const results = [];
+
+    for (const obj of gameObjects) {
+      if (!obj.body || obj.name === robotName) continue;
+
+      // If substring is provided, skip names that don't match
+      if (substring !== null && !obj.name.includes(substring)) continue;
+
+      const dist = getDistance(robotName, obj.name);
+      if (dist !== null) {
+        results.push({ name: obj.name, distance: dist });
+      }
+    }
+
+    // Sort by distance ascending and return only the names
+    return results
+      .sort((a, b) => a.distance - b.distance)
+      .map(obj => obj.name);
+  }
+
+
+
+
+
+
+
+    function createResearchUI() {
+      researchUIBox = document.createElement('div');
+      researchUIBox.id = 'research-ui';
+      document.body.appendChild(researchUIBox);
+
+      researchUIBox.style.position = 'absolute';
+      researchUIBox.style.top = '10px';
+      researchUIBox.style.left = 'calc(50% + 280px)';
+      researchUIBox.style.background = 'rgba(0, 0, 0, 0.7)';
+      researchUIBox.style.padding = '10px';
+      researchUIBox.style.borderRadius = '10px';
+      researchUIBox.style.color = 'white';
+      researchUIBox.style.fontFamily = `'Segoe UI', Tahoma, Geneva, Verdana, sans-serif`;
+      researchUIBox.style.fontSize = '14px';
+      researchUIBox.style.zIndex = '30';
+      researchUIBox.style.minWidth = '200px';
+      researchUIBox.style.textAlign = 'center';
+
+      const label = document.createElement('div');
+      label.innerText = 'Research Progress';
+      label.style.marginBottom = '10px';
+      researchUIBox.appendChild(label);
+
+      // Container for the progress bar
+      const barContainer = document.createElement('div');
+      barContainer.style.width = '100%';
+      barContainer.style.height = '20px';
+      barContainer.style.background = '#333';
+      barContainer.style.borderRadius = '10px';
+      barContainer.style.position = 'relative';
+      barContainer.style.overflow = 'hidden';
+      researchUIBox.appendChild(barContainer);
+
+      // The actual colored bar that fills up
+      researchBarElement = document.createElement('div');
+      researchBarElement.style.height = '100%';
+      researchBarElement.style.width = '0%';
+      researchBarElement.style.background = '#00ccff';
+      researchBarElement.style.borderRadius = '10px';
+      researchBarElement.style.transition = 'width 0.2s ease';
+      barContainer.appendChild(researchBarElement);
+
+      // Overlay text that stays centered
+      researchTextOverlay = document.createElement('div');
+      researchTextOverlay.style.position = 'absolute';
+      researchTextOverlay.style.top = '0';
+      researchTextOverlay.style.left = '0';
+      researchTextOverlay.style.width = '100%';
+      researchTextOverlay.style.height = '100%';
+      researchTextOverlay.style.display = 'flex';
+      researchTextOverlay.style.alignItems = 'center';
+      researchTextOverlay.style.justifyContent = 'center';
+      researchTextOverlay.style.color = 'white';
+      researchTextOverlay.style.fontWeight = 'bold';
+      researchTextOverlay.style.pointerEvents = 'none'; // ensures clicks pass through
+      researchTextOverlay.innerText = '0%';
+      barContainer.appendChild(researchTextOverlay);
+    }
+
+    function updateResearchUI() {
+      if (!researchBarElement || !researchTextOverlay) return;
+      const percent = Math.min(100, Math.max(0, research)).toFixed(1);
+      researchBarElement.style.width = `${percent}%`;
+      researchTextOverlay.innerText = `${percent}%`;
+    }
+
+    function robotJump(){
+      if(isGrounded())
+      {
+        robot.applyCentralImpulse(new Ammo.btVector3(0, JUMP_STRENGTH, 0));
+        robot.activate();
+      }
+    }
+
+    function doNothing()
+    {
+      let nothing = 0;
+      nothing = 0
+    }
+
+    function createInstructionsBox() {
+      // Create the main container
+      instructionsBox = document.createElement('div');
+      instructionsBox.id = 'instructions-box';
+      document.body.appendChild(instructionsBox);
+
+      // Create the Hide/Show button
+      instructionsBoxButton = document.createElement('button');
+      instructionsBoxButton.innerText = 'Hide';
+      instructionsBoxButton.style.marginBottom = '10px';
+      instructionsBoxButton.style.width = '100%';
+      instructionsBoxButton.style.padding = '5px';
+      instructionsBoxButton.style.cursor = 'pointer';
+      instructionsBoxButton.style.border = 'none';
+      instructionsBoxButton.style.borderRadius = '5px';
+      instructionsBoxButton.style.backgroundColor = '#444';
+      instructionsBoxButton.style.color = '#fff';
+      instructionsBoxButton.addEventListener('click', toggleInstructionsBox);
+      instructionsBox.appendChild(instructionsBoxButton);
+
+      // Create the content container
+      instructionsBoxContent = document.createElement('div');
+      instructionsBoxContent.innerHTML = `
+        <h2>Instructions</h2>
+        <p>Use Arrow Keys to move</p>
+        <p>Press Space to Jump</p>
+        <p>Press S to raise arm, W to lower</p>
+        <p>Press E to grab, R to release</p>
+        <p>Click 'Open Controls' (top right of screen) to view Colliders and Directional Arrows</p>
+        <p>Click 'Robot Sensors' within Controls to view distance and object sensors</p>
+      `;
+      instructionsBox.appendChild(instructionsBoxContent);
+
+      instructionsBoxContent.style.display = 'none';
+      instructionsBoxButton.innerText = 'Show Instructions';
+
+      // Style the box
+      instructionsBox.style.position = 'absolute';
+      instructionsBox.style.top = '10px';
+      instructionsBox.style.left = '10px';
+      instructionsBox.style.width = '220px';
+      instructionsBox.style.padding = '10px';
+      instructionsBox.style.background = 'rgba(20, 20, 20, 0.8)';
+      instructionsBox.style.color = '#eee';
+      instructionsBox.style.fontFamily = `'Segoe UI', Tahoma, Geneva, Verdana, sans-serif`;
+      instructionsBox.style.fontSize = '13px';
+      instructionsBox.style.lineHeight = '1.4';
+      instructionsBox.style.borderRadius = '8px';
+      instructionsBox.style.boxShadow = '0 2px 8px rgba(0,0,0,0.4)';
+      instructionsBox.style.zIndex = '20';
+    }
+
+    function createRepairsUI() {
+      repairsUIBox = document.createElement('div');
+      repairsUIBox.id = 'repairs-ui';
+      document.body.appendChild(repairsUIBox);
+
+      repairsUIBox.style.position = 'absolute';
+      repairsUIBox.style.top = '10px';
+      repairsUIBox.style.left = '50%';
+      repairsUIBox.style.transform = 'translateX(-50%)';
+      repairsUIBox.style.background = 'rgba(0, 0, 0, 0.7)';
+      repairsUIBox.style.padding = '10px';
+      repairsUIBox.style.borderRadius = '10px';
+      repairsUIBox.style.color = 'white';
+      repairsUIBox.style.fontFamily = `'Segoe UI', Tahoma, Geneva, Verdana, sans-serif`;
+      repairsUIBox.style.fontSize = '14px';
+      repairsUIBox.style.zIndex = '30';
+      repairsUIBox.style.minWidth = '250px';
+      repairsUIBox.style.textAlign = 'center';
+
+      globalTimerElement = document.createElement('div');
+      globalTimerElement.innerText = `Timer: 0.00s`;
+      globalTimerElement.style.marginBottom = '10px';
+      repairsUIBox.appendChild(globalTimerElement);
+
+      repairsListElement = document.createElement('div');
+      repairsUIBox.appendChild(repairsListElement);
+
+      updateRepairsUI();
+    }
+
+
+    function updateRepairsUI() {
+      if (!repairsListElement) return;
+
+      repairsListElement.innerHTML = '';
+
+      for (const repair of repairs) {
+        const div = document.createElement('div');
+
+        // Set text
+        div.innerText = `${repair.building}: Repair Time ${repair.repairTime.toFixed(1)}s | Catastrophic in ${repair.timeUntilCatastrophic.toFixed(1)}s`;
+
+        // Color it red if timeUntilCatastrophic <= 0
+        if (repair.timeUntilCatastrophic <= 0) {
+          div.style.color = 'red';
+        } else if (repair.repairing) {
+          div.style.color = 'lime'; // Optional: green if actively repairing
+        } else {
+          div.style.color = 'white'; // default color
+        }
+
+        repairsListElement.appendChild(div);
+      }
+    }
+
+
+
+    function startRepairs(buildingName) {
+      const repair = repairs.find(r => r.building === buildingName);
+      if (!repair) return;
+
+      // Decrement repairTime each frame in coreGame
+      repair.repairing = true; // Mark it as actively repairing
+    }
+
+    function stopRepairs(buildingName) {
+      const repair = repairs.find(r => r.building === buildingName);
+      if (!repair) return;
+
+      repair.repairing = false;
+    }
+
+
+
+    function updateRepairs() {
+      if (!robot) return;
+
+      // Get robot's position
+      const robotTransform = new Ammo.btTransform();
+      robot.getMotionState().getWorldTransform(robotTransform);
+      const robotOrigin = robotTransform.getOrigin();
+      const robotPos = new THREE.Vector3(robotOrigin.x(), robotOrigin.y(), robotOrigin.z());
+
+      for (const repair of repairs) {
+        const obj = gameObjects.find(o => o.name === repair.building);
+        if (!obj || !obj.body) {
+          repair.repairing = false; // Cannot repair if object is missing
+          continue;
+        }
+
+        // const distance = getDistance("robot", obj.name);
+        const inFront = detectObject()
+        const distance = distanceSensor();
+
+
+        if (distance <= repairDistance && inFront === obj.name && currentlyHolding === null) {
+          repair.repairing = true;
+        } else {
+          repair.repairing = false;
+        }
+      }
+    }
+
+
+
+
+
+
+
+    function toggleInstructionsBox() {
+      if (instructionsBoxContent.style.display === 'none') {
+        instructionsBoxContent.style.display = 'block';
+        instructionsBoxButton.innerText = 'Hide Instructions';
+      } else {
+        instructionsBoxContent.style.display = 'none';
+        instructionsBoxButton.innerText = 'Show Instructions';
+      }
+    }
+
+
+    function createSkySphere() {
+      const geometry = new THREE.SphereGeometry(10000, 60, 40); // Radius big enough to surround everything
+      // const loader = new THREE.TextureLoader();
+        textureLoader.load('/static/textures/skybox.jpg', (texture) => {
+        texture.minFilter = THREE.LinearMipMapLinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.anisotropy = 2; // Reduce GPU memory use
+        const material = new THREE.MeshBasicMaterial({
+          map: texture,
+          side: THREE.BackSide
+        });
+        const skySphere = new THREE.Mesh(geometry, material);
+        scene.add(skySphere);
+      });
+    }
+
+
+    function initThree() {
+      scene = new THREE.Scene();
+
+      createSkySphere();
+
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 20000);
+
+      camera.position.set(0, 55, 100);
+      camera.lookAt(0, 0, 0);
+
+      renderer = new THREE.WebGLRenderer({ antialias: false });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+
+      controls.addEventListener('start', () => {
+        cameraAutoFollowEnabled = false;
+      });
+      controls.addEventListener('end', () => {
+
+      });
+    }
+
+    function initPhysics() {
+      const config = new Ammo.btDefaultCollisionConfiguration();
+      const dispatcher = new Ammo.btCollisionDispatcher(config);
+      const broadphase = new Ammo.btDbvtBroadphase();
+      const solver = new Ammo.btSequentialImpulseConstraintSolver();
+      physicsWorld = new Ammo.btDiscreteDynamicsWorld(dispatcher, broadphase, solver, config);
+      physicsWorld.setGravity(new Ammo.btVector3(0, GRAVITY, 0));
+    }
+
+    function createPlane() {
+      // const loader = new THREE.TextureLoader();
+      textureLoader.load('/static/textures/moon.jpg', (texture) => {
+        const plane = new THREE.Mesh(
+          new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE),
+          new THREE.MeshStandardMaterial({ map: texture })
+        );
+        plane.rotation.x = -Math.PI / 2;
+        scene.add(plane);
+      });
+    }
+
+
+    function createStaticGroundCollider() {
+      const halfSize = PLANE_SIZE / 2;
+
+      const shape = new Ammo.btStaticPlaneShape(new Ammo.btVector3(0, 1, 0), 0); 
+      const transform = new Ammo.btTransform();
+      transform.setIdentity();
+      transform.setOrigin(new Ammo.btVector3(0, 0, 0)); // Y=0
+      const motionState = new Ammo.btDefaultMotionState(transform);
+      const rbInfo = new Ammo.btRigidBodyConstructionInfo(0, motionState, shape, new Ammo.btVector3(0, 0, 0));
+      const body = new Ammo.btRigidBody(rbInfo);
+      physicsWorld.addRigidBody(body);
+
+      // 🔵 Create the visible collider mesh
+      const geometry = new THREE.BoxGeometry(PLANE_SIZE, 2, PLANE_SIZE);
+      const material = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(0, 1, 0); // Half-height offset (since box is 2 units tall)
+
+      scene.add(mesh);
+      mesh.visible = settings.showColliderMeshes; // match setting
+
+      // 🔵 Optional: add to gameObjects for unified visibility management
+      gameObjects.push({
+        name: "ground_collider",
+        body,
+        mesh
+      });
+    }
+
+
+    function createLighting() {
+      scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(10, 20, 10);
+      scene.add(light);
+    }
+
+    function createCapsuleRobot(radius, height, mass, position, name = "player") {
+      const shape = new Ammo.btCapsuleShape(radius, height - 2 * radius);
+      const transform = new Ammo.btTransform();
+      transform.setIdentity();
+      transform.setOrigin(new Ammo.btVector3(position.x, position.y + height / 2, position.z));
+      const motionState = new Ammo.btDefaultMotionState(transform);
+      const localInertia = new Ammo.btVector3(0, 0, 0);
+      shape.calculateLocalInertia(mass, localInertia);
+      const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, shape, localInertia);
+      const body = new Ammo.btRigidBody(rbInfo);
+
+      body.setRestitution(0);
+      body.setFriction(ROBOT_BASE_FRICTION);
+      body.setDamping(0.0, 0.9);
+      body.setAngularFactor(new Ammo.btVector3(0, 0, 0));
+
+      if (ROBOT_USE_ANISOTROPIC_FRICTION) {
+        const anisotropicFriction = new Ammo.btVector3(ROBOT_LATERAL_FRICTION, 0, 0);
+        body.setAnisotropicFriction(anisotropicFriction, Ammo.btCollisionObject.ACF_X);
+      }
+
+      physicsWorld.addRigidBody(body);
+      rigidBodies.push(body);
+      robot = body;
+
+      const geometry = new THREE.CapsuleGeometry(radius, height - 2 * radius, 4, 8);
+      const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+      const mesh = new THREE.Mesh(geometry, material);
+
+      // if (settings.showColliderMeshes) scene.add(mesh);
+      scene.add(mesh);
+      mesh.visible = settings.showColliderMeshes;
+
+
+      const arrows = {
+        x: new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), mesh.position, 10, 0xff0000, 3),
+        y: new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), mesh.position, 10, 0xffff00, 3),
+        z: new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), mesh.position, 10, 0x0000ff, 3)
+      };
+
+      if (settings.showDebugArrows) {
+        scene.add(arrows.x, arrows.y, arrows.z);
+      }
+
+      gameObjects.push({ name, body, mesh, arrows: settings.showDebugArrows ? arrows : null });
+
+      // const mtlLoader = new MTLLoader();
+      sharedMtlLoader.load('/static/models/rover/obj.mtl', (materials) => {
+        materials.preload();
+        // const objLoader = new OBJLoader();
+        sharedObjLoader .setMaterials(materials);
+        sharedObjLoader .load('/static/models/rover/tinker.obj', (object) => {
+          object.scale.copy(ROBOT_MODEL_SCALE);
+          object.rotation.copy(ROBOT_MODEL_ROTATION);
+          scene.add(object);
+          robotVisual = object;
+        });
+      });
+    }
+
+    function isGrounded(threshold = 2) {
+      if (!robot) return false;
+
+      const transform = new Ammo.btTransform();
+      robot.getMotionState().getWorldTransform(transform);
+
+      const origin = transform.getOrigin();
+      const rotation = transform.getRotation();
+      const quat = new THREE.Quaternion(rotation.x(), rotation.y(), rotation.z(), rotation.w());
+
+      // Cast ray straight down from slightly below the robot’s bottom (capsule base)
+      const rayStart = new THREE.Vector3(origin.x(), origin.y() - ROBOT_HEIGHT / 2 + ROBOT_RADIUS - 0.1, origin.z());
+      const rayEnd = rayStart.clone().add(new THREE.Vector3(0, -threshold, 0)); // cast downward by `threshold`
+
+      const btRayStart = new Ammo.btVector3(rayStart.x, rayStart.y, rayStart.z);
+      const btRayEnd = new Ammo.btVector3(rayEnd.x, rayEnd.y, rayEnd.z);
+      const rayCallback = new Ammo.ClosestRayResultCallback(btRayStart, btRayEnd);
+
+      physicsWorld.rayTest(btRayStart, btRayEnd, rayCallback);
+
+      if (rayCallback.hasHit()) {
+        const hitBody = Ammo.castObject(rayCallback.get_m_collisionObject(), Ammo.btRigidBody);
+
+        // Ignore self or robot arm collisions
+        if (hitBody !== robot && hitBody !== robotArmBody) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+
+
+    function moveRobotForward() {
+      if (!robot) return;
+      if(isGrounded())
+      {
+        const transform = robot.getWorldTransform();
+        const rotation = transform.getRotation();
+        const quat = new THREE.Quaternion(rotation.x(), rotation.y(), rotation.z(), rotation.w());
+        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(quat).normalize();
+
+        const impulse = new Ammo.btVector3(0, 0, 0);
+
+        const lv = robot.getLinearVelocity();
+        const horizSpeed = Math.sqrt(lv.x() * lv.x() + lv.z() * lv.z());
+        const climbScale = 1 - Math.min(horizSpeed / 10, 1);
+        const climbBoost = ROBOT_IMPULSE_CLIMB_STRENGTH * climbScale;
+
+        impulse.setValue(
+          forward.x * ROBOT_IMPULSE_STRENGTH * deltaTime,
+          climbBoost * deltaTime,
+          forward.z * ROBOT_IMPULSE_STRENGTH * deltaTime
+        );
+        
+        robot.activate();
+        robot.applyCentralImpulse(impulse);
+      }
+    }
+
+
+
+    function moveRobotBackward() {
+      if (!robot) return;
+      if(isGrounded())
+      {
+        const transform = robot.getWorldTransform();
+        const rotation = transform.getRotation();
+        const quat = new THREE.Quaternion(rotation.x(), rotation.y(), rotation.z(), rotation.w());
+        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(quat).normalize();
+
+        const impulse = new Ammo.btVector3(0, 0, 0);
+
+        const lv = robot.getLinearVelocity();
+        const horizSpeed = Math.sqrt(lv.x() * lv.x() + lv.z() * lv.z());
+        const climbScale = 1 - Math.min(horizSpeed / 10, 1);
+        const climbBoost = ROBOT_IMPULSE_CLIMB_STRENGTH * climbScale;
+
+        impulse.setValue(
+          -forward.x * ROBOT_IMPULSE_STRENGTH * deltaTime,
+          climbBoost * deltaTime,
+          -forward.z * ROBOT_IMPULSE_STRENGTH * deltaTime
+        );
+
+        robot.activate();
+        robot.applyCentralImpulse(impulse);
+      }
+    }
+
+
+
+    function turnRobotRight() {
+      if (!robot) return;
+      const transform = robot.getWorldTransform();
+
+      const delta = -ROBOT_ROTATION_SPEED * deltaTime; // 🔥 Scaled by deltaTime
+
+      const axis = new THREE.Vector3(0, 1, 0);
+      const dq = new THREE.Quaternion().setFromAxisAngle(axis, delta);
+      const rot = transform.getRotation();
+      const q = new THREE.Quaternion(rot.x(), rot.y(), rot.z(), rot.w()).multiply(dq);
+
+      transform.setRotation(new Ammo.btQuaternion(q.x, q.y, q.z, q.w));
+      robot.setWorldTransform(transform);
+      robot.activate();
+    }
+
+
+
+
+    function turnRobotLeft() {
+      if (!robot) return;
+      const transform = robot.getWorldTransform();
+
+      const delta = ROBOT_ROTATION_SPEED * deltaTime; // 🔥 Scaled by deltaTime
+
+      const axis = new THREE.Vector3(0, 1, 0);
+      const dq = new THREE.Quaternion().setFromAxisAngle(axis, delta);
+      const rot = transform.getRotation();
+      const q = new THREE.Quaternion(rot.x(), rot.y(), rot.z(), rot.w()).multiply(dq);
+
+      transform.setRotation(new Ammo.btQuaternion(q.x, q.y, q.z, q.w));
+      robot.setWorldTransform(transform);
+      robot.activate();
+    }
+
+
+    function moveRobotByInput() {
+      if (!robot) return;
+
+      if (keys['ArrowUp'] && isGrounded()) {
+        moveRobotForward();
+      }
+
+      if (keys['ArrowDown'] && isGrounded()) {
+        moveRobotBackward();
+      }
+
+      if (keys['ArrowLeft']) {
+        turnRobotLeft();
+      }
+
+      if (keys['ArrowRight']) {
+        turnRobotRight();
+      }
+    }
+
+    function turnRobotTowards(name) {
+      if (!robot) return;
+
+      const targetObj = gameObjects.find(obj => obj.name === name);
+      if (!targetObj) return;
+
+      // Get robot position and forward direction
+      const robotTransform = new Ammo.btTransform();
+      robot.getMotionState().getWorldTransform(robotTransform);
+      const robotOrigin = robotTransform.getOrigin();
+      const robotRotation = robotTransform.getRotation();
+      const robotPos = new THREE.Vector3(robotOrigin.x(), robotOrigin.y(), robotOrigin.z());
+      const robotQuat = new THREE.Quaternion(robotRotation.x(), robotRotation.y(), robotRotation.z(), robotRotation.w());
+
+      const robotForward = new THREE.Vector3(0, 0, 1).applyQuaternion(robotQuat).normalize();
+
+      // Get target position
+      let targetPos;
+      if (targetObj.body) {
+        const targetTransform = new Ammo.btTransform();
+        targetObj.body.getMotionState().getWorldTransform(targetTransform);
+        const targetOrigin = targetTransform.getOrigin();
+        targetPos = new THREE.Vector3(targetOrigin.x(), targetOrigin.y(), targetOrigin.z());
+      } else if (targetObj.mesh) {
+        targetPos = targetObj.mesh.position.clone();
+      } else {
+        return;
+      }
+
+      // Compute direction to target
+      const toTarget = new THREE.Vector3().subVectors(targetPos, robotPos);
+      toTarget.y = 0; // Only horizontal plane
+      toTarget.normalize();
+
+      // Calculate angle between robot forward and target direction
+      const angle = robotForward.angleTo(toTarget);
+
+      // Calculate cross product to determine if target is to the left or right
+      const cross = new THREE.Vector3().crossVectors(robotForward, toTarget);
+
+      if (angle > 0.01) { // Some small threshold to prevent jittering
+        if (cross.y > 0) {
+          turnRobotLeft();
+        } else {
+          turnRobotRight();
+        }
+      }
+    }
+
+
+
+    function renderStaticModel(objPath, mtlPath, position, scale, rotation) {
+      // const mtlLoader = new MTLLoader();
+      sharedMtlLoader.load(mtlPath, (materials) => {
+        materials.preload();
+        const objLoader = new OBJLoader();
+        objLoader.setMaterials(materials);
+        objLoader.load(objPath, (object) => {
+          object.position.copy(position);
+          object.scale.copy(scale);
+          object.rotation.copy(rotation);
+          scene.add(object);
+        });
+      });
+    }
+
+    function createCapsuleObstacle(position, radius, height, mass = 0, modelOptions = null, name = "CapsuleObstacle") {
+      const shape = new Ammo.btCapsuleShape(radius, height - 2 * radius);
+      const transform = new Ammo.btTransform();
+      transform.setIdentity();
+      transform.setOrigin(new Ammo.btVector3(position.x, position.y + height / 2, position.z));
+      const motionState = new Ammo.btDefaultMotionState(transform);
+      const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, shape, new Ammo.btVector3(0, 0, 0));
+      const body = new Ammo.btRigidBody(rbInfo);
+      physicsWorld.addRigidBody(body);
+
+      const geometry = new THREE.CapsuleGeometry(radius, height - 2 * radius, 4, 8);
+      const material = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.copy(position);
+      // if (settings.showColliderMeshes) scene.add(mesh);
+      scene.add(mesh);
+      mesh.visible = settings.showColliderMeshes;
+
+
+      gameObjects.push({ name, body, mesh });
+
+
+      if (modelOptions && modelOptions.objPath && modelOptions.mtlPath) {
+        const offset = modelOptions.offset || new THREE.Vector3(0, 0, 0);
+        const modelPos = position.clone().add(offset);
+
+        renderStaticModel(
+          modelOptions.objPath,
+          modelOptions.mtlPath,
+          modelPos,
+          modelOptions.scale || new THREE.Vector3(1, 1, 1),
+          modelOptions.rotation || new THREE.Euler(0, 0, 0)
+        );
+      }
+    }
+
+    function createBoxObstacle(position, size, mass = 0, modelOptions = null, name = "BoxObstacle") {
+      const shape = new Ammo.btBoxShape(new Ammo.btVector3(size.x / 2, size.y / 2, size.z / 2));
+      const transform = new Ammo.btTransform();
+      transform.setIdentity();
+      transform.setOrigin(new Ammo.btVector3(position.x, position.y + size.y / 2, position.z));
+      const motionState = new Ammo.btDefaultMotionState(transform);
+      const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, shape, new Ammo.btVector3(0, 0, 0));
+      const body = new Ammo.btRigidBody(rbInfo);
+      physicsWorld.addRigidBody(body);
+
+      const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+      const material = new THREE.MeshBasicMaterial({ color: 0x0000ff, wireframe: true });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.copy(position);
+
+      // if (settings.showColliderMeshes) scene.add(mesh);
+      scene.add(mesh);
+      mesh.visible = settings.showColliderMeshes;
+
+      gameObjects.push({ name, body, mesh });
+
+
+      if (modelOptions && modelOptions.objPath && modelOptions.mtlPath) {
+        const offset = modelOptions.offset || new THREE.Vector3(0, 0, 0);
+        const modelPos = position.clone().add(offset);
+
+        renderStaticModel(
+          modelOptions.objPath,
+          modelOptions.mtlPath,
+          modelPos,
+          modelOptions.scale || new THREE.Vector3(1, 1, 1),
+          modelOptions.rotation || new THREE.Euler(0, 0, 0)
+        );
+      }
+    }
+
+    function createBoxDynamic(position, size, mass = 5, modelOptions = null, name = "BoxDynamic") {
+      const shape = new Ammo.btBoxShape(new Ammo.btVector3(size.x / 2, size.y / 2, size.z / 2));
+      const transform = new Ammo.btTransform();
+      transform.setIdentity();
+      transform.setOrigin(new Ammo.btVector3(position.x, position.y + size.y / 2, position.z));
+      const motionState = new Ammo.btDefaultMotionState(transform);
+      const localInertia = new Ammo.btVector3(0, 0, 0);
+      shape.calculateLocalInertia(mass, localInertia);
+      const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, shape, localInertia);
+      const body = new Ammo.btRigidBody(rbInfo);
+
+      body.setRestitution(0.1);
+      body.setFriction(1.0);
+      body.setRollingFriction(0.3);
+      body.setActivationState(Ammo.DISABLE_DEACTIVATION);
+
+      physicsWorld.addRigidBody(body);
+      body.activate();
+      body.setLinearVelocity(new Ammo.btVector3(0, -1, 0));
+
+      const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+      const material = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.copy(position);
+      // if (settings.showColliderMeshes) scene.add(mesh);
+      scene.add(mesh);
+      mesh.visible = settings.showColliderMeshes;
+
+
+      if (modelOptions && modelOptions.objPath && modelOptions.mtlPath) {
+        const offset = modelOptions.offset || new THREE.Vector3(0, 0, 0);
+        const scale = modelOptions.scale || new THREE.Vector3(1, 1, 1);
+        const rotationEuler = modelOptions.rotation || new THREE.Euler(0, 0, 0);
+        const rotationOffsetQuat = new THREE.Quaternion().setFromEuler(rotationEuler);
+
+        // const mtlLoader = new MTLLoader();
+        sharedMtlLoader.load(modelOptions.mtlPath, (materials) => {
+          materials.preload();
+          const objLoader = new OBJLoader();
+          objLoader.setMaterials(materials);
+          objLoader.load(modelOptions.objPath, (object) => {
+            object.position.copy(position.clone().add(offset));
+            object.scale.copy(scale);
+            scene.add(object);
+
+            gameObjects.push({
+              name,
+              body,
+              mesh,
+              visual: object,
+              visualOffset: offset,
+              visualRotationOffset: rotationOffsetQuat
+            });
+          });
+        });
+      } else {
+        gameObjects.push({ name, body, mesh });
+      }
+    }
+
+    function createCapsuleDynamic(position, radius, height, mass = 5, modelOptions = null, name = "CapsuleDynamic") {
+      const shape = new Ammo.btCapsuleShape(radius, height - 2 * radius);
+      const transform = new Ammo.btTransform();
+      transform.setIdentity();
+      transform.setOrigin(new Ammo.btVector3(position.x, position.y + height / 2, position.z));
+      const motionState = new Ammo.btDefaultMotionState(transform);
+      const localInertia = new Ammo.btVector3(0, 0, 0);
+      shape.calculateLocalInertia(mass, localInertia);
+      const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, shape, localInertia);
+      const body = new Ammo.btRigidBody(rbInfo);
+
+      body.setRestitution(0.1);
+      body.setFriction(1.0);
+      body.setRollingFriction(0.3);
+      body.setActivationState(Ammo.DISABLE_DEACTIVATION);
+
+      physicsWorld.addRigidBody(body);
+      body.activate();
+      body.setLinearVelocity(new Ammo.btVector3(0, -1, 0));
+
+      const geometry = new THREE.CapsuleGeometry(radius, height - 2 * radius, 4, 8);
+      const material = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.copy(position);
+
+      // if (settings.showColliderMeshes) scene.add(mesh);
+      scene.add(mesh);
+      mesh.visible = settings.showColliderMeshes;
+
+
+      if (modelOptions && modelOptions.objPath && modelOptions.mtlPath) {
+        const offset = modelOptions.offset || new THREE.Vector3(0, 0, 0);
+        const scale = modelOptions.scale || new THREE.Vector3(1, 1, 1);
+        const rotationEuler = modelOptions.rotation || new THREE.Euler(0, 0, 0);
+        const rotationOffsetQuat = new THREE.Quaternion().setFromEuler(rotationEuler);
+
+        // const mtlLoader = new MTLLoader();
+        sharedMtlLoader.load(modelOptions.mtlPath, (materials) => {
+          materials.preload();
+          const objLoader = new OBJLoader();
+          objLoader.setMaterials(materials);
+          objLoader.load(modelOptions.objPath, (object) => {
+            object.position.copy(position.clone().add(offset));
+            object.scale.copy(scale);
+            scene.add(object);
+
+            gameObjects.push({
+              name,
+              body,
+              mesh,
+              visual: object,
+              visualOffset: offset,
+              visualRotationOffset: rotationOffsetQuat
+            });
+          });
+        });
+      } else {
+        gameObjects.push({ name, body, mesh });
+      }
+    }
+
+    function updatePhysics(deltaTime) {
+      physicsWorld.stepSimulation(deltaTime, 1);
+
+      for (const obj of gameObjects) {
+        const { name, body, mesh, arrows, visual, visualOffset, visualRotationOffset } = obj;
+        const motionState = body.getMotionState();
+        if (motionState) {
+          motionState.getWorldTransform(tmpTransform);
+          const origin = tmpTransform.getOrigin();
+          const rot = tmpTransform.getRotation();
+
+          mesh.position.set(origin.x(), origin.y(), origin.z());
+          mesh.quaternion.set(rot.x(), rot.y(), rot.z(), rot.w());
+
+          if (arrows) {
+            arrows.x.position.copy(mesh.position);
+            arrows.y.position.copy(mesh.position);
+            arrows.z.position.copy(mesh.position);
+            arrows.x.setDirection(new THREE.Vector3(1, 0, 0).applyQuaternion(mesh.quaternion));
+            arrows.y.setDirection(new THREE.Vector3(0, 1, 0).applyQuaternion(mesh.quaternion));
+            arrows.z.setDirection(new THREE.Vector3(0, 0, 1).applyQuaternion(mesh.quaternion));
+          }
+
+          if (visual) {
+            const offsetRotated = visualOffset ? visualOffset.clone().applyQuaternion(mesh.quaternion) : new THREE.Vector3(0, 0, 0);
+            visual.position.copy(mesh.position.clone().add(offsetRotated));
+
+            if (visualRotationOffset) {
+              const finalQuat = mesh.quaternion.clone().multiply(visualRotationOffset);
+              visual.quaternion.copy(finalQuat);
+            } else {
+              visual.quaternion.copy(mesh.quaternion);
+            }
+          }
+
+          if (body === robot && robotVisual) {
+            const baseQuat = mesh.quaternion;
+            const offsetQuat = new THREE.Quaternion().setFromEuler(ROBOT_MODEL_ROTATION);
+            const finalQuat = baseQuat.clone().multiply(offsetQuat);
+
+            robotVisual.position.copy(mesh.position).add(ROBOT_MODEL_OFFSET.clone().applyQuaternion(baseQuat));
+            robotVisual.quaternion.copy(finalQuat);
+          }
+
+          if (obj.name === "robot_arm") {
+            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(mesh.quaternion);
+            const tipOffset = forward.multiplyScalar(4); // distance from center to end
+            handPosition.copy(mesh.position.clone().add(tipOffset));
+            if (handMesh) handMesh.position.copy(handPosition);
+          }
+
+        }
+      }
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function getGameObjectByName(name) {
+      return gameObjects.find(obj => obj.name === name) || null;
+    }
+
+    function addForce(name, power, direction) {
+      // Normalize the direction to ensure consistent scaling
+      const dir = direction.clone().normalize().multiplyScalar(power);
+      for (const obj of gameObjects) {
+        if (obj.name === name && obj.body) {
+          const force = new Ammo.btVector3(dir.x, dir.y, dir.z);
+          obj.body.activate(); // Make sure body is awake
+          obj.body.applyCentralImpulse(force); // Use impulse for immediate effect
+          break;
+        }
+      }
+    }
+
+    function getDistance(name1, name2) {
+      let obj1 = null;
+      let obj2 = null;
+
+      for (const obj of gameObjects) {
+        if (!obj1 && obj.name === name1) obj1 = obj;
+        if (!obj2 && obj.name === name2) obj2 = obj;
+        if (obj1 && obj2) break;
+      }
+
+      if (!obj1 || !obj2) {
+        return null;
+      }
+
+      const transform1 = new Ammo.btTransform();
+      const transform2 = new Ammo.btTransform();
+      obj1.body.getMotionState().getWorldTransform(transform1);
+      obj2.body.getMotionState().getWorldTransform(transform2);
+
+      const pos1 = transform1.getOrigin();
+      const pos2 = transform2.getOrigin();
+
+      const dx = pos1.x() - pos2.x();
+      const dy = pos1.y() - pos2.y();
+      const dz = pos1.z() - pos2.z();
+
+      return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    function pushAway(name1, name2, power = 2) {
+      let obj1 = null;
+      let obj2 = null;
+
+      for (const obj of gameObjects) {
+        if (!obj1 && obj.name === name1) obj1 = obj;
+        if (!obj2 && obj.name === name2) obj2 = obj;
+        if (obj1 && obj2) break;
+      }
+
+      if (!obj1 || !obj2) {
+        return;
+      }
+
+      const transform1 = new Ammo.btTransform();
+      const transform2 = new Ammo.btTransform();
+      obj1.body.getMotionState().getWorldTransform(transform1);
+      obj2.body.getMotionState().getWorldTransform(transform2);
+
+      const pos1 = transform1.getOrigin();
+      const pos2 = transform2.getOrigin();
+
+      const direction = new THREE.Vector3(
+        pos1.x() - pos2.x(),
+        pos1.y() - pos2.y(),
+        pos1.z() - pos2.z()
+      ).normalize();
+
+      const impulse = new Ammo.btVector3(
+        direction.x * power,
+        direction.y * power,
+        direction.z * power
+      );
+
+      obj1.body.activate();
+      obj1.body.applyCentralImpulse(impulse);
+    }
+
+    function startMultiFrameEvent(key, duration, funct) {
+      multi_frame_events[key] = {
+        timeLeft: duration,
+        callback: funct
+      };
+    }
+
+    function isAnyMultiFrameEventRunning(){
+      if (Object.keys(multi_frame_events).length === 0)
+      {
+          return false;
+      }
+      else
+      {
+        return true;
+      }
+    }
+
+    function isMultiFrameEventRunning(key){
+      if (key in multi_frame_events)
+      {
+          return true;
+      }
+      else
+      {
+        return false;
+      }
+    }
+
+    function updateTimeCounter(deltaTime) {
+      for (const key in multi_frame_events) {
+        const entry = multi_frame_events[key];
+        if (entry.callback) {
+          entry.callback(deltaTime); // Run the function for this frame
+        }
+
+        entry.timeLeft -= deltaTime;
+        if (entry.timeLeft <= 0) {
+          delete multi_frame_events[key]; // Remove when time is up
+        }
+      }
+    }
+
+    function scheduleRobotActions(actionsList) {
+      timelineRobot = actionsList;
+      timelineActiveRobot = true;
+      timelineClockRobot = 0;
+    }
+
+    function scheduleRobotSequence(startTime, actionsList) {
+      timelineRobot = actionsList.map(item => ({
+        action: item.action,
+        conditionFunction: item.conditionFunction || null,
+        duration: item.duration ?? Infinity,
+        maxExecutions: item.maxExecutions ?? Infinity,
+        executions: 0,
+        done: false,
+        startTime: null,
+        stopTime: null
+      }));
+
+      timelineClockRobot = 0;
+      timelineActiveRobot = true;
+    }
+
+    function runRobotSchedule(deltaTime) {
+      if (!timelineActiveRobot) return;
+
+      timelineClockRobot += deltaTime;
+
+      const current = timelineRobot.find(item => !item.done);
+      if (!current) {
+        timelineActiveRobot = false;
+        return;
+      }
+
+      if (current.startTime === null) {
+        current.startTime = timelineClockRobot;
+        current.stopTime = current.conditionFunction
+          ? Infinity
+          : current.startTime + current.duration;
+      }
+
+      const shouldRun = current.executions < current.maxExecutions;
+      if (shouldRun) {
+        current.action();
+        current.executions++;
+      }
+
+      const conditionMet = current.conditionFunction && current.conditionFunction();
+      const timeExpired = timelineClockRobot >= current.stopTime;
+
+      if (conditionMet || timeExpired) {
+        current.done = true;
+      }
+    }
+
+
+    function scheduleEventActions(actionsList) {
+      timelineEvent = actionsList;
+      timelineActiveEvent = true;
+      timelineClockEvent = 0;
+    }
+
+    function scheduleEventSequence(startTime, actionsList) {
+      timelineEvent = actionsList.map(item => ({
+        action: item.action,
+        conditionFunction: item.conditionFunction || null,
+        duration: item.duration ?? Infinity,
+        maxExecutions: item.maxExecutions ?? Infinity,
+        executions: 0,
+        done: false,
+        startTime: null,
+        stopTime: null
+      }));
+
+      timelineClockEvent = 0;
+      timelineActiveEvent = true;
+    }
+
+
+    function runEventSchedule(deltaTime) {
+      if (!timelineActiveEvent) return;
+
+      timelineClockEvent += deltaTime;
+
+      const current = timelineEvent.find(item => !item.done);
+      if (!current) {
+        timelineActiveEvent = false;
+        return;
+      }
+
+      if (current.startTime === null) {
+        current.startTime = timelineClockEvent;
+        current.stopTime = current.conditionFunction ? Infinity : current.startTime + current.duration;
+      }
+
+      const shouldRun = current.executions < current.maxExecutions;
+      if (shouldRun) {
+        current.action();
+        current.executions++;
+      }
+
+      const conditionMet = current.conditionFunction && current.conditionFunction();
+      const timeExpired = timelineClockEvent >= current.stopTime;
+
+      if (conditionMet || timeExpired) {
+        current.done = true;
+      }
+    }
+
+
+    function senseRobotDistance(yRotation = 0, maxDistance = 500, senseWithHand = false, offset=-8, roundAt=0.2) {
+      if (!robot) return null;
+
+      const rayFrom = new Ammo.btVector3();
+      const rayTo = new Ammo.btVector3();
+
+      const transform = new Ammo.btTransform();
+      robot.getMotionState().getWorldTransform(transform);
+
+      const origin = transform.getOrigin();
+      const rotation = transform.getRotation();
+      const baseQuat = new THREE.Quaternion(rotation.x(), rotation.y(), rotation.z(), rotation.w());
+
+      // Apply additional Y-axis rotation
+      const yRotQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yRotation);
+      const adjustedQuat = baseQuat.clone().multiply(yRotQuat);
+      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(adjustedQuat).normalize();
+
+      // Use hand position if requested and available
+      const fromVec = (senseWithHand && handPosition)
+        ? handPosition.clone()
+        : new THREE.Vector3(origin.x(), origin.y() + 2, origin.z()).add(forward.clone().multiplyScalar(3));
+
+      const toVec = fromVec.clone().add(forward.clone().multiplyScalar(maxDistance));
+
+      rayFrom.setValue(fromVec.x, fromVec.y, fromVec.z);
+      rayTo.setValue(toVec.x, toVec.y, toVec.z);
+
+      const rayCallback = new Ammo.ClosestRayResultCallback(rayFrom, rayTo);
+      physicsWorld.rayTest(rayFrom, rayTo, rayCallback);
+
+      if (rayCallback.hasHit()) {
+        const hitBody = Ammo.castObject(rayCallback.get_m_collisionObject(), Ammo.btRigidBody);
+        if (hitBody === robot || hitBody === robotArmBody) return null;
+
+        const hitPoint = rayCallback.get_m_hitPointWorld();
+        const dx = hitPoint.x() - origin.x();
+        const dy = hitPoint.y() - origin.y();
+        const dz = hitPoint.z() - origin.z();
+
+        let answer = Math.sqrt(dx * dx + dy * dy + dz * dz) + offset;
+        if(answer <= roundAt){
+          answer=0;
+        }
+        return answer;
+      }
+
+      return null;
+    }
+
+
+
+
+    function senseRobotHitName(maxDistance = 500, rayStartOffset = 3, senseWithHand = false) {
+      if (!robot) return null;
+
+      const rayFrom = new Ammo.btVector3();
+      const rayTo = new Ammo.btVector3();
+
+      const transform = new Ammo.btTransform();
+      robot.getMotionState().getWorldTransform(transform);
+      const origin = transform.getOrigin();
+      const rotation = transform.getRotation();
+      const quat = new THREE.Quaternion(rotation.x(), rotation.y(), rotation.z(), rotation.w());
+
+      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(quat).normalize();
+
+      const fromVec = (senseWithHand && handPosition)
+        ? handPosition.clone()
+        : new THREE.Vector3(origin.x(), origin.y(), origin.z()).add(forward.clone().multiplyScalar(rayStartOffset));
+
+      const toVec = fromVec.clone().add(forward.clone().multiplyScalar(maxDistance));
+
+      rayFrom.setValue(fromVec.x, fromVec.y, fromVec.z);
+      rayTo.setValue(toVec.x, toVec.y, toVec.z);
+
+      const rayCallback = new Ammo.ClosestRayResultCallback(rayFrom, rayTo);
+      physicsWorld.rayTest(rayFrom, rayTo, rayCallback);
+
+      if (rayCallback.hasHit()) {
+        const hitBody = Ammo.castObject(rayCallback.get_m_collisionObject(), Ammo.btRigidBody);
+        if (hitBody === robot || hitBody === robotArmBody) return null;
+
+        for (const obj of gameObjects) {
+          if (obj.body === hitBody) {
+            return obj.name;
+          }
+        }
+        return "unnamed";
+      }
+
+      return null;
+    }
+
+
+    function distanceSensor(yRotation = 0, maxDistance = 500)
+    {
+      const robotDistance = senseRobotDistance(yRotation, maxDistance);
+      if (robotDistance !== null) {
+        return robotDistance.toFixed(2);
+      }
+      else
+      {
+        return 500;
+      }
+    }
+
+    function detectObject(){
+      const name = senseRobotHitName();
+      return name;
+    }
+
+    function createRobotArm() {
+      const armSize = new THREE.Vector3(0.5, 0.5, 8); // width, height, depth
+      const armOffset = new THREE.Vector3(0, 0, 0); // Offset relative to robot
+
+      // Create Ammo.js box shape for the arm
+      const shape = new Ammo.btBoxShape(new Ammo.btVector3(armSize.x / 2, armSize.y / 2, armSize.z / 2));
+      const transform = new Ammo.btTransform();
+      transform.setIdentity();
+
+      // Get robot's current position and rotation
+      robot.getMotionState().getWorldTransform(transform);
+      const origin = transform.getOrigin();
+      const quat = transform.getRotation();
+      const baseQuat = new THREE.Quaternion(quat.x(), quat.y(), quat.z(), quat.w());
+      const worldOffset = armOffset.clone().applyQuaternion(baseQuat);
+
+      // Calculate final arm position in world space
+      const armPos = new THREE.Vector3(origin.x(), origin.y(), origin.z()).add(worldOffset);
+      transform.setOrigin(new Ammo.btVector3(armPos.x, armPos.y, armPos.z));
+
+      // Create motion state and rigid body
+      const motionState = new Ammo.btDefaultMotionState(transform);
+      const localInertia = new Ammo.btVector3(0, 0, 0);
+      shape.calculateLocalInertia(0.5, localInertia);
+
+      const rbInfo = new Ammo.btRigidBodyConstructionInfo(0.5, motionState, shape, localInertia);
+      const armBody = new Ammo.btRigidBody(rbInfo);
+      armBody.setFriction(10.0);
+      armBody.setRollingFriction(1.0);
+      armBody.setRestitution(0.1);
+      armBody.setActivationState(Ammo.DISABLE_DEACTIVATION);
+      physicsWorld.addRigidBody(armBody);
+
+      // Create Three.js mesh for the arm (grey)
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(armSize.x, armSize.y, armSize.z),
+        new THREE.MeshStandardMaterial({ color: 0x808080 }) // Grey
+      );
+      mesh.position.copy(armPos);
+      scene.add(mesh);
+      gameObjects.push({ name: "robot_arm", body: armBody, mesh });
+
+      // Expose bodies for external reference
+      window.robotArmBody = armBody;
+      window.robotBody = robot;
+
+      // 🔵 Create the hand sphere (black, visual only)
+      const handRadius = 0.6;
+      const handGeom = new THREE.SphereGeometry(handRadius, 16, 16);
+      const handMat = new THREE.MeshStandardMaterial({ color: 0x000000 }); // Black
+      handMesh = new THREE.Mesh(handGeom, handMat);
+      scene.add(handMesh);
+
+      // Visual only — no physics body
+      handBody = null;
+
+      return armBody;
+    }
+
+
+    function attachArmToRobot(armBody) {
+      // const pivotInRobot = new Ammo.btVector3(0, 0, ROBOT_RADIUS + 1);
+      const pivotInRobot = new Ammo.btVector3(0, 0, 0);
+      const pivotInArm = new Ammo.btVector3(0, 0, -4); // match arm shape
+      // const pivotInArm = new Ammo.btVector3(0, 0, 0); // match arm shape
+      const axisInRobot = new Ammo.btVector3(1, 0, 0); // X-axis
+      const axisInArm = new Ammo.btVector3(1, 0, 0);
+
+      const hinge = new Ammo.btHingeConstraint(
+        robot,
+        armBody,
+        pivotInRobot,
+        pivotInArm,
+        axisInRobot,
+        axisInArm,
+        true
+      );
+
+      physicsWorld.addConstraint(hinge, true);
+      return hinge;
+    }
+
+    function rotateArm(targetAngle = Math.PI / 4, speed = 2.0) {
+      if (!armHinge) return;
+
+      armHinge.enableAngularMotor(true, speed, 10);
+      armHinge.setLimit(targetAngle, targetAngle, 0.9, 0.3, 1.0); // [lower, upper, softness, bias, relaxation]
+    }
+
+    function raiseArm(speed = 1.0) {
+      if (!armHinge) return;
+
+      const targetAngle = -Math.PI / 2; // Raise up (towards robot's front)
+      const currentAngle = armHinge.getHingeAngle();
+
+      // If we've reached or passed the target angle, stop the motor
+      if (currentAngle <= targetAngle) {
+        armHinge.enableAngularMotor(false, 0, 0);
+        return;
+      }
+
+      const direction = -1; // Negative to raise the arm
+      const velocity = direction * Math.abs(speed);
+      const maxForce = 10;
+
+      armHinge.enableAngularMotor(true, velocity, maxForce);
+    }
+
+    function lowerArm(speed = 1.0) {
+      if (!armHinge) return;
+
+      const targetAngle = Math.PI / 2; // Allow arm to go lower (downward)
+      const currentAngle = armHinge.getHingeAngle();
+
+      // Update hinge limits to allow downward swing
+      armHinge.setLimit(-Math.PI / 2, Math.PI / 2, 0.9, 0.3, 1.0);
+
+      if (currentAngle >= targetAngle) {
+        armHinge.enableAngularMotor(false, 0, 0);
+        return;
+      }
+
+      const velocity = Math.abs(speed);
+      const maxForce = 10;
+
+      armHinge.enableAngularMotor(true, velocity, maxForce);
+    }
+
+    function stopArm() {
+      if (!armHinge) return;
+      armHinge.enableAngularMotor(false, 0, 0);
+    }
+
+    function freezeArm() {
+      if (!armHinge) return;
+
+      const currentAngle = armHinge.getHingeAngle();
+      armHinge.setLimit(currentAngle, currentAngle, 1.0, 0.3, 1.0); // Lock rotation
+      armHinge.enableAngularMotor(false, 0, 0); // Just in case motor was on
+    }
+
+    function unfreezeArm() {
+      if (!armHinge) return;
+
+      const minAngle = -Math.PI / 2;
+      const maxAngle = Math.PI / 2;  // ← Allow full range now
+      armHinge.setLimit(minAngle, maxAngle, 0.9, 0.3, 1.0);
+    }
+
+    function setArmUp() {
+      moveArmToAngle(-Math.PI / 2, 1.0);
+    }
+
+    function setArmDown() {
+      moveArmToAngle(Math.PI / 2, 1.0);
+    }
+
+    function setArmMiddle() {
+      moveArmToAngle(0, 1.0);
+    }
+
+
+
+    function grab(name, baseSpeed = 3) {
+      const obj = getGameObjectByName(name);
+      if (!obj || !obj.body || !handPosition) return;
+
+      const transform = new Ammo.btTransform();
+      obj.body.getMotionState().getWorldTransform(transform);
+      const origin = transform.getOrigin();
+      const objPos = new THREE.Vector3(origin.x(), origin.y(), origin.z());
+
+      const direction = new THREE.Vector3().subVectors(handPosition, objPos);
+      const distance = direction.length();
+
+      if (distance > 4) {
+        // Exponential force multiplier based on distance
+        const forceMultiplier = Math.pow(distance, 1.5); // tweak exponent for more/less aggression
+        const velocity = direction.normalize().multiplyScalar(baseSpeed * forceMultiplier);
+
+        const btVelocity = new Ammo.btVector3(velocity.x, velocity.y, velocity.z);
+        obj.body.setLinearVelocity(btVelocity);
+      } else {
+        // Optional: zero out velocity if it's already very close
+        // obj.body.setLinearVelocity(new Ammo.btVector3(0, 0, 0));
+        const forceMultiplier = Math.pow(distance, 1); // tweak exponent for more/less aggression
+        const velocity = direction.normalize().multiplyScalar(baseSpeed * forceMultiplier);
+
+        const btVelocity = new Ammo.btVector3(velocity.x, velocity.y, velocity.z);
+        obj.body.setLinearVelocity(btVelocity);
+      }
+    }
+
+
+    function getClosestObjectToHand(maxDistance = 8) {
+      if (!handPosition) return null;
+
+      let closest = null;
+      let closestDist = Infinity;
+
+      for (const obj of gameObjects) {
+        if (!obj.body || obj.name === "robot" || obj.name === "robot_arm") continue;
+
+        const transform = new Ammo.btTransform();
+        obj.body.getMotionState().getWorldTransform(transform);
+        const origin = transform.getOrigin();
+        const objPos = new THREE.Vector3(origin.x(), origin.y(), origin.z());
+
+        const dist = handPosition.distanceTo(objPos);
+
+        if (dist < maxDistance && dist < closestDist) {
+          closest = obj;
+          closestDist = dist;
+        }
+      }
+
+      return closest;
+    }
+
+    function armGrab(){
+      ROBOT_GRABBING=true;
+    }
+
+    function armDrop(){
+      ROBOT_GRABBING=false;
+      currentlyHolding=null;
+    }
+
+    function armUp(speed=1){
+      raiseArm(speed);
+      unfreezeArm()
+    }
+
+    function armDown(speed=1){
+      lowerArm(speed);
+      unfreezeArm()
+    }
+
+    function armStop(){
+      stopArm();
+      freezeArm()
+    }
+
+    function doResearch(){
+      if(research < 100){
+        research += researchSpeed*deltaTime
+      }
+      else{
+        research = 100
+      }
+    }
+
+    function updateResearch()
+    {
+      for (const obj of gameObjects) {
+        if (obj.name.includes("mineral")){
+          if (getDistance(obj.name,"lander") < researchDistance){
+            doResearch();
+          }
+        }
+      }
+    }
+
+    function coreGame(){
+      deltaTime = clock.getDelta();
+      now = performance.now() / 1000;
+      requestAnimationFrame(update);
+      updateTimeCounter(deltaTime);
+
+
+      updateRepairs();
+      updateResearch();
+
+      if (armTargetAngle !== null) {
+        const current = armHinge.getHingeAngle();
+        const diff = Math.abs(current - armTargetAngle);
+        if (diff < 0.01) { // close enough
+          armHinge.enableAngularMotor(false, 0, 0);
+          armHinge.setLimit(armTargetAngle, armTargetAngle, 1.0, 0.3, 1.0); // Lock
+          armTargetAngle = null;
+        }
+      }
+
+
+
+      if (globalTimerRunning) {
+        globalTimer += deltaTime;
+      }
+
+      // Update each repair
+      for (const repair of repairs) {
+        // Decrement catastrophic timer
+        if (repair.timeUntilCatastrophic > 0) {
+          repair.timeUntilCatastrophic -= deltaTime;
+          if (repair.timeUntilCatastrophic < 0) repair.timeUntilCatastrophic = 0;
+        }
+
+        // If repair has been started, decrement repairTime
+        if (repair.repairing) {
+          repair.repairTime -= deltaTime;
+          if (repair.repairTime < 0) repair.repairTime = 0;
+        }
+      }
+
+      // Remove completed repairs
+      for (let i = repairs.length - 1; i >= 0; i--) {
+        const r = repairs[i];
+        if (r.repairTime === 0 && r.timeUntilCatastrophic > 0) {
+          repairs.splice(i, 1);
+        }
+      }
+
+      // Stop global timer if all repairs are resolved or catastrophes
+      if ((repairs.length === 0 || repairs.every(r => r.timeUntilCatastrophic === 0)) && research >= 100) {
+        globalTimerRunning = false;
+      }
+
+      // Update the repairs UI
+      if (globalTimerElement) {
+        globalTimerElement.innerText = `Timer: ${globalTimer.toFixed(2)}s`;
+      }
+
+      updateRepairsUI();
+      updateResearchUI();
+
+
+
+
+
+
+
+      if (!timelineActiveRobot){
+          moveRobotByInput();
+      }
+
+      updatePhysics(deltaTime);
+
+      framesSinceStart++;
+
+      if(framesSinceStart === 1){
+        freezeArm();
+        settings.showDebugArrows = false;
+
+        // Force update the arrow visibility manually
+        for (const obj of gameObjects) {
+          if (obj.arrows) {
+            obj.arrows.x.visible = settings.showDebugArrows;
+            obj.arrows.y.visible = settings.showDebugArrows;
+            obj.arrows.z.visible = settings.showDebugArrows;
+          }
+        }
+
+        if (showDebugArrowsController) {
+            showDebugArrowsController.updateDisplay();
+          }
+
+        moveArmToAngle(-Math.PI / 20, 1.0);
+
+        start();
+      }
+
+      if(ROBOT_GRABBING){
+        const target = getClosestObjectToHand();
+        if (target) {
+          currentlyHolding = target.name;
+          grab(target.name);
+        }
+      }
+      else
+      {
+        currentlyHolding = null;
+      }
+
+
+
+      runRobotSchedule(deltaTime)
+      runEventSchedule(deltaTime)
+
+      sensorDisplay.distance = distanceSensor();
+      sensorDisplay.object = detectObject() || 'None';
+      distanceController.updateDisplay();
+      objectController.updateDisplay();
+
+
+      if (cameraAutoFollowEnabled && robot) {
+        const motionState = robot.getMotionState();
+        if (motionState) {
+          motionState.getWorldTransform(tmpTransform);
+          const origin = tmpTransform.getOrigin();
+          const targetPos = new THREE.Vector3(origin.x(), origin.y(), origin.z());
+          controls.target.lerp(targetPos, 0.1);  // Smooth tracking
+
+          // Gently adjust camera height toward target vertical offset
+          const desiredY = controls.target.y + CAMERA_VERTICAL_OFFSET;
+          camera.position.y += (desiredY - camera.position.y) * CAMERA_VERTICAL_ADJUST_SPEED;
+
+
+          const cameraOffset = new THREE.Vector3().subVectors(camera.position, controls.target);
+          const currentDistance = cameraOffset.length();
+
+          if (currentDistance > CAMERA_MAX_DISTANCE) {
+            camera.position.addScaledVector(cameraOffset.normalize(), -(currentDistance - CAMERA_MAX_DISTANCE) * CAMERA_ADJUST_SPEED);
+          } else if (currentDistance < CAMERA_MIN_DISTANCE) {
+            camera.position.addScaledVector(cameraOffset.normalize(), (CAMERA_MIN_DISTANCE - currentDistance) * CAMERA_ADJUST_SPEED);
+          }
+        }
+      }
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+
+
+    init();
+  </script>
+</body>
+</html>

@@ -35,15 +35,14 @@ def index():
 	return render_template("index.html")
 
 
-@app.route('/game', methods=['GET', 'POST'])
-def game():
-	return render_template("game.html")
+@app.route('/robot_sim', methods=['GET', 'POST'])
+def robot_sim():
+	return render_template("robot_sim.html")
 
 
 
 if __name__ == '__main__':
 	app.run(debug=True,  host='0.0.0.0', port = 8080)
-	# app.run(debug=False,  host='0.0.0.0', port = 8080)
 
 
 

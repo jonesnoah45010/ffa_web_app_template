@@ -1,7 +1,7 @@
 #!/bin/bash
 
-SERVICE_NAME="robot-sim" # Define your service name here. Example "test-portal"
-PROJECT_NAME="YOUR_PROJECT" # Reference to an existing Google Cloud Console Project
+SERVICE_NAME="YOUR_APP_NAME_HERE" # Define your service name here. Example "test-portal"
+PROJECT_NAME="YOUR_CLOUD_PROJECT_HERE" # Reference to an existing Google Cloud Console Project
 REGION="us-east1" # Should match the region you want to host your app from
 
 # Step 1: Build and push the container image
