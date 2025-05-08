@@ -237,7 +237,6 @@
       {
         cameraAutoFollowEnabled = true;
         // YOUR CODE HERE
-        brain()
 
       }
 
@@ -245,110 +244,6 @@
 
 
 
-
-    function brain(){
-      let repair = getMostUrgentRepair()
-      if (repair != null){
-        navTo(repair)
-      }
-      else if(findClosestNotResearchedMineral() === null)
-      {
-        doNothing();
-      }
-      else{
-        setRobotSpeed(90);
-        let target_mineral = findClosestNotResearchedMineral();
-        if (currentlyHolding === null){
-          navTo(target_mineral);
-          if (reached(target_mineral, 1))
-          {
-            armGrab();
-            setArmUp();
-          }
-        }
-        else{
-          navTo("lander");
-          if (reached("lander",40) && currentlyHolding != null)
-          {
-            setArmMiddle();
-            setRobotSpeed(90);
-          }
-          if (reached("lander",20) && currentlyHolding != null)
-          {
-            armDrop();
-            setRobotSpeed(85);
-          }
-          if(getDistance("robot","lander") < 30)
-          {
-            armDrop();
-            setArmMiddle();
-          }
-        }
-      }
-    }
-
-    function findClosestNotResearchedMineral()
-    {
-      let minerals = closestObjectsByDistance("mineral")
-      for (const mineral of minerals) {
-        if(!isResearched(mineral)){
-          return mineral
-        }
-      }
-      return null;
-    }
-
-    function isResearched(name){
-      return getDistance(name,"lander") <= researchDistance
-    }
-
-
-    function reached(name, dist=1){
-      return distanceSensor() <= dist && detectObject() === name;
-     }
-
-    function getMostUrgentRepair() {
-      if (repairs.length === 0) {
-        return null;
-      }
-      let mostUrgent = repairs[0];
-      for (let i = 1; i < repairs.length; i++) {
-        if (repairs[i].timeUntilCatastrophic < mostUrgent.timeUntilCatastrophic) {
-          mostUrgent = repairs[i];
-        }
-      }
-      return mostUrgent.building;
-    }
-
-    function navTo(name) {
-      // used to navigate to a target without running into obstacles
-      let sense = 20;
-      if(distanceSensor(0) <= (sense*1.5) && detectObject() === name || getDistance("robot", name) < (sense*0.5)) { // if close to target b-line towards it
-        turnRobotTowards(name);
-        moveRobotForward();
-        setRobotSpeed(95);
-      }
-      else{
-          if (distanceSensor(0) < sense && distanceSensor(Math.PI/6) < sense && distanceSensor(-Math.PI/6) < sense) { // obstacle blocking in front on left and on right
-            moveRobotBackward()
-            turnRobotRight();
-          } else if(distanceSensor(0) < (sense*1.2)) { // obstacle detected directly ahead
-            turnRobotRight();
-            moveRobotForward();
-            setRobotSpeed(90);
-          } else if (distanceSensor(Math.PI/6) < sense || distanceSensor(Math.PI/4) < sense || distanceSensor(Math.PI/2.1) < (sense*0.33)) { // obstacle detected on left at at 30, 45 or 85 degrees
-            turnRobotRight();
-            moveRobotForward();
-          } else if (distanceSensor(-Math.PI/6) < sense || distanceSensor(-Math.PI/4) < sense || distanceSensor(-Math.PI/2.1) < (sense*0.33)) { // obstacle detected on right at 30, 45 or 85 degrees
-            turnRobotLeft();
-            moveRobotForward();
-          } else { // otherwise b-line towards target
-            turnRobotTowards(name);
-            moveRobotForward();
-            setRobotSpeed(100);
-          }
-      }
-    }
 
 
 
